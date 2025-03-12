@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex justify-center items-center h-screen bg-gray-100">
+<div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-[50%]">
+    <h1 class="text-2xl font-bold text-center mb-4">Todo List - [Chen]</h1>
+
+    <div class="flex flex-col gap-4">
+        <input type="hidden" id="taskId">
+        <input type="text" id="taskName" placeholder="ชื่องาน" class="border p-2 rounded">
+        <input type="text" id="taskDetail" placeholder="รายละเอียดงาน" class="border p-2 rounded">
+        <input type="datetime-local" id="dueDate" class="border p-2 rounded">
+        <button onclick="addOrUpdateTask()" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-700">เพิ่ม/อัปเดตงาน</button>
+    </div>
+
+    <ul id="taskList" class="mt-4 space-y-2"></ul>
+</div>
+
+<script>
+    const API_URL = "http://localhost:8080/tasks";
+
+    // +1 day to solve the error that can select the previous day
+    document.addEventListener("DOMContentLoaded", () => {
+        const today = new Date();
+        today.setDate(today.getDate() + 1);
+
+        const tomorrow = today.toISOString().slice(0, 16);
+        document.getElementById('dueDate').setAttribute('min', tomorrow);
+        fetchTasks();
+    });
+
+    async function fetchTasks() {
+        const response = await fetch(API_URL);
+        const tasks = await response.json();
+
+        tasks.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+        const taskList = document.getElementById("taskList");
+        taskList.innerHTML = "";
+
+        tasks.forEach(task => {
+            const li = document.createElement("li");
+            li.className = "p-2 bg-gray-100 rounded flex justify-between items-center";
+
+            const dueDateObj = new Date(task.dueDate);
+
+            const formattedDate = dueDateObj.toLocaleString('th-TH', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+            }).replace(',', '').replace('-', '-');
+
+            const formattedTime = dueDateObj.toLocaleString('th-TH', {
+                hour: '2-digit', minute: '2-digit', hour12: false
+            });
+
+            li.innerHTML = `
+                <div>
+                    <strong>${task.name}</strong> - ${task.detail} <br>
+                    <small class="text-gray-600">กำหนดส่งวันที่: ${formattedDate} เวลา ${formattedTime}</small> <br>
+                    <span class="${task.completed ? 'text-green-500' : 'text-red-500'}">${task.completed ? 'เสร็จแล้ว' : 'ยังไม่เสร็จ'}</span>
+                </div>
+                <div class="space-x-2">
+                    <button onclick="editTask(${task.id}, '${task.name}', '${task.detail}', '${task.dueDate}', ${task.completed})" class="bg-yellow-500 text-white px-2 py-1 rounded">แก้ไข</button>
+                    <button onclick="toggleComplete(${task.id}, ${task.completed})" class="bg-green-500 text-white px-2 py-1 rounded">✓</button>
+                    <button onclick="removeTask(${task.id})" class="bg-red-500 text-white px-2 py-1 rounded">ลบ</button>
+                </div>
+            `;
+            taskList.appendChild(li);
+        });
+    }
+
+    async function addOrUpdateTask() {
+        const taskId = document.getElementById("taskId").value;
+        const taskName = document.getElementById("taskName").value;
+        const taskDetail = document.getElementById("taskDetail").value;
+        const dueDate = document.getElementById("dueDate").value;
+
+        if (!taskName || !dueDate) {
+            alert("กรุณากรอกชื่องานและวันกำหนดส่ง");
+            return;
+        }
+
+        const newTask = { name: taskName, detail: taskDetail, dueDate: dueDate, completed: false };
+
+        if (taskId) {
+            await fetch(`${API_URL}/${taskId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newTask),
+            });
+        } else {
+            await fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newTask),
+            });
+        }
+
+        document.getElementById("taskId").value = "";
+        document.getElementById("taskName").value = "";
+        document.getElementById("taskDetail").value = "";
+        document.getElementById("dueDate").value = "";
+
+        fetchTasks();
+    }
+
+    function editTask(id, name, detail, dueDate, completed) {
+        document.getElementById("taskId").value = id;
+        document.getElementById("taskName").value = name;
+        document.getElementById("taskDetail").value = detail;
+        document.getElementById("dueDate").value = dueDate;
+    }
+
+    async function toggleComplete(id, completed) {
+        const response = await fetch(`${API_URL}/${id}`, { method: "GET" });
+        if (!response.ok) {
+            console.error("Error fetching task:", response.statusText);
+            return;
+        }
+        const task = await response.json();
+
+        const updatedTask = {
+            name: task.name,
+            detail: task.detail,
+            dueDate: task.dueDate,
+            completed: !completed
+        };
+
+        await fetch(`${API_URL}/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedTask),
+        });
+        fetchTasks();
+    }
+
+    async function removeTask(id) {
+        await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+        fetchTasks();
+    }
+
+    document.addEventListener("DOMContentLoaded", fetchTasks);
+</script>
+</body>
+</html>
